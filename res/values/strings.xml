@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">行车视频记录</string>
+    <string name="btn_name_rec">开始录像</string>
+    <string name="btn_name_stop">停止录像</string>
+    <string name="btn_name_save">保存录像</string>
+    <string name="file_tab">循环录像文件</string>
+    <string name="saved_tab">保留的录像文件</string>
+    <string name="mode_title_1">选择需要保存的录像</string>
+    <string name="mode_title_2">选择需要删除的录像</string>
+    <string name="tip_1">请先停止录像</string>
+    <string name="dialog_title">保存录像</string>
+    <string name="dialog_msg">正在保存...</string>
+    <string name="dialog_title_2">删除录像</string>
+    <string name="dialog_msg_2">正在删除...</string>
+    <string name="menu_title_1">保存录像</string>
+    <string name="menu_title_2">删除录像</string>
+    <string name="action_bar_rec">rec</string>
+    <string name="action_bar_preview">preview</string>
+    <string name="action_bar_delete">delete</string>
+    <string name="action_bar_save">save</string>
+    <string name="alert_dialog_ok">确定</string>
+    <string name="alert_dialog_cancel">取消</string>
+    <string name="alert_dialog_title">删除已保留的录像？</string>
+    <string name="action_bar_close">close</string>
+    
+</resources>
