@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 import android.app.Notification;
@@ -13,6 +14,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
+import android.hardware.Camera.Parameters;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.media.MediaRecorder.OutputFormat;
@@ -167,10 +169,31 @@ public class RecordService extends Service implements
 		}
 		
 		Camera.Parameters parameters = mCam.getParameters();
+		
+		parameters.setWhiteBalance(Parameters.WHITE_BALANCE_AUTO);
+		
+		if (parameters.isZoomSupported()) {
+            parameters.setZoom(0);
+        }
+		
+		parameters.setFocusMode(Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+		
+		if (parameters.isVideoStabilizationSupported())
+			parameters.setVideoStabilization(true);
+		
+		//if (parameters.isAutoExposureLockSupported())
+		//	parameters.setAutoExposureLock(true);
+		
 		parameters.setPreviewSize(VIDEO_WIDTH, VIDEO_HEIGHT);
-		if (parameters.isAutoExposureLockSupported())
-			parameters.setAutoExposureLock(true);
-		mCam.setParameters(parameters);
+		
+		List<int[]> frameRates = parameters.getSupportedPreviewFpsRange();
+        if (frameRates != null && frameRates.size() > 0) {
+        	int[] fpsRange = frameRates.get(frameRates.size() - 1);
+        	parameters.setPreviewFpsRange(fpsRange[Parameters.PREVIEW_FPS_MIN_INDEX],
+                    						fpsRange[Parameters.PREVIEW_FPS_MAX_INDEX]);
+        }
+        
+   		mCam.setParameters(parameters);
 		
 		return true;
 	}
@@ -189,8 +212,7 @@ public class RecordService extends Service implements
         profile.videoFrameHeight = VIDEO_HEIGHT;
         profile.videoFrameWidth = VIDEO_WIDTH;
         profile.fileFormat = OutputFormat.MPEG_4;
-        //profile.videoFrameRate = 30;
-        profile.videoBitRate = 2000000;
+        profile.videoBitRate = 3000000;
         mMr.setProfile(profile);
         
         mCurrentFileName = getOutputMediaFileName();

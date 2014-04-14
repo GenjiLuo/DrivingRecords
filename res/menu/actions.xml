@@ -24,7 +24,7 @@
           android:showAsAction="always"
           android:title="@string/action_bar_delete" />
 	<item android:id="@+id/action_preview"
-          android:icon="@android:drawable/ic_menu_camera"
+          android:icon="@drawable/ic_camera"
           android:showAsAction="always"
           android:title="@string/action_bar_preview" /> 
 	<item android:id="@+id/action_rec"
