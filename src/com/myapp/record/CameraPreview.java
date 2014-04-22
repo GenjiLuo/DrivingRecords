@@ -6,8 +6,7 @@ import android.view.SurfaceView;
 
 
 public class CameraPreview extends SurfaceView {
-	//public static float PICTURE_RATIO_16_9 = 16/9;
-	//public static float PICTURE_RATIO_4_3 = 4/3;
+	private int previewWidth = 16, previewHeight = 9;
 	
 	public CameraPreview(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -15,6 +14,14 @@ public class CameraPreview extends SurfaceView {
 	
 	@Override
 	protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-		setMeasuredDimension(heightMeasureSpec*16/9, heightMeasureSpec);
+		setMeasuredDimension(heightMeasureSpec*previewWidth/previewHeight, 
+								heightMeasureSpec);
+	}
+	
+	public void setPreviewRatio(int width, int height) {
+		previewWidth = width;
+		previewHeight = height;
+		
+		requestLayout();
 	}
 }

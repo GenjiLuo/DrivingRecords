@@ -7,32 +7,94 @@
     tools:context="com.myapp.record.MainActivity"
     tools:ignore="MergeRootFrame" >
 
-    <FrameLayout
-        android:id="@+id/list_file_layout"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1" >
-    </FrameLayout>
+        android:layout_weight="1"
+        android:background="@drawable/shape"
+        android:baselineAligned="false" >
 
-    <FrameLayout
+        <LinearLayout
+            android:id="@+id/button_layout"
+            android:layout_width="171dp"
+            android:layout_height="match_parent"
+            android:background="#d0000000"
+            android:orientation="vertical" >
+
+            <Button
+                android:id="@+id/preview_btn"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_marginBottom="5dp"
+                android:layout_marginLeft="5dp"
+                android:layout_marginRight="5dp"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/custom_button"
+                android:drawableTop="@drawable/ic_camera"
+                android:text="@string/btn_name_preview"
+                android:textColor="#ffffff"
+                android:textSize="16sp" />
+
+            <ToggleButton
+                android:id="@+id/save_btn"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_marginBottom="5dp"
+                android:layout_marginLeft="5dp"
+                android:layout_marginRight="5dp"
+                android:background="@drawable/toggle_button"
+                android:drawableTop="@drawable/ic_save"
+                android:text="@string/btn_name_save"
+                android:textColor="#ffffff"
+                android:textOff="@string/btn_name_save"
+                android:textOn="@string/btn_name_save"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/delete_btn"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_marginBottom="10dp"
+                android:layout_marginLeft="5dp"
+                android:layout_marginRight="5dp"
+                android:background="@drawable/custom_button"
+                android:drawableTop="@drawable/ic_delete"
+                android:text="@string/btn_name_delete"
+                android:textColor="#ffffff"
+                android:textSize="16sp" />
+
+        </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/list_file_layout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" >
+        </FrameLayout>
+    </LinearLayout>
+
+    <RelativeLayout
         android:id="@+id/status_info_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="0"
-        android:paddingLeft="2dp"
-        android:paddingRight="2dp"
-        android:paddingTop="5dp" >
+        android:background="@drawable/bottom_status_bar" >
 
         <TextView
-            android:id="@+id/status_view"
-            android:layout_width="match_parent"
+            android:id="@+id/storage_size_text"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/textview_bar"
-            android:text="Test Info"
-            android:textAppearance="?android:attr/textAppearanceSmallPopupMenu"
-            android:textColor="@android:color/darker_gray"
-            android:textSize="20sp" />
+            android:textColor="@color/black"
+            android:textSize="15sp" />
 
-    </FrameLayout>
+        <TextView
+            android:id="@+id/dir_size_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_marginLeft="45dp"
+            android:layout_toRightOf="@+id/storage_size_text"
+            android:textColor="@color/black"
+            android:textSize="15sp" />
+
+    </RelativeLayout>
 
 </LinearLayout>

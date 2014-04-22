@@ -7,7 +7,6 @@ import android.app.ListFragment;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
@@ -33,17 +32,18 @@ public class FileListFragment extends ListFragment {
 		mFileDir = getArguments() != null ? 
 					getArguments().getString("dir") : 
 					null;
-					
+		
 		mAdapter = new ArrayAdapter<String>(getActivity(),
- 						android.R.layout.simple_list_item_1);	
+						android.R.layout.simple_list_item_1);	
 		
 		setListAdapter(mAdapter);
+		refreshFileList();
 	}
 	
  	@Override
 	public void onActivityCreated(Bundle savedInstanceState) {
 		super.onActivityCreated(savedInstanceState);
-		
+		setEmptyText("No Files");
 		refreshFileList();
 	}
 
@@ -54,17 +54,19 @@ public class FileListFragment extends ListFragment {
 		RecordFileList.FileInfo fi = recFileList.get(position);
 		
 		Intent intent = new Intent(Intent.ACTION_VIEW);
-		File file = new File(Environment.getExternalStorageDirectory() + 
-								"/" + mFileDir + "/" + fi.name);
+		File file = new File(mFileDir + "/" + fi.name);
 		intent.setDataAndType(Uri.fromFile(file), "video/*");
 		startActivity(intent);
 	}
      
 	public void refreshFileList() {
+		mAdapter.clear();
+		
 		ArrayList<RecordFileList.FileInfo> fileList = 
 				RecordFileList.getFilelist(mFileDir, ".mp4");
-		
-		mAdapter.clear();
+		if (fileList == null)
+			return;
+				
 		for (int i = 0; i < fileList.size(); i++) 
 			mAdapter.add(fileList.get(i).title);
 	}

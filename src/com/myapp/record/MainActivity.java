@@ -5,11 +5,10 @@ import java.util.ArrayList;
 
 import android.app.ActionBar;
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.app.ActivityManager.RunningServiceInfo;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
+import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
@@ -18,50 +17,62 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.Window;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ToggleButton;
 
 
-public class MainActivity extends Activity implements ActionBar.TabListener {
-	public static final String MEDIA_DIR = "DrivingRecords";
-	public static final String SAVED_DIR = MEDIA_DIR + "/saved";
-	
+public class MainActivity extends Activity implements 
+							ActionBar.TabListener,
+							View.OnClickListener {
 	private static final String RECORD_FILE_TAB = "record";
 	private static final String SAVED_FILE_TAB = "saved";
 	
-	private FileListFragment mRecordFileFragment, mSavedFileFragment;
+	private FileListFragment mRecordFileFragment = null, 
+								mSavedFileFragment = null;
 	private StatusReceiver receiver;  
-	private boolean isRecording = false;
 	private boolean saveFile = false;
+	private boolean noSecondaryStorage = false;
 	private ProgressDialog pd;
-	private TextView mStatusView;
+	private TextView mStorageSizeText, mDirectorySizeText;
+	private ExternalStorage.StorageDirectory mStorageDir;
+	private Button mPreviewButton, mDeleteButton;
+	private ToggleButton mSaveButton;
 		
-	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); 
+		
 		setContentView(R.layout.activity_main);
 		
-		File dir = new File(Environment.getExternalStorageDirectory(), MEDIA_DIR);
-        if (!dir.exists()) 
-            dir.mkdirs();
-        
-        dir = new File(Environment.getExternalStorageDirectory(), SAVED_DIR);
-        if (!dir.exists()) 
-            dir.mkdirs();
- 		
-        mStatusView = (TextView)findViewById(R.id.status_view);
-        
-		mRecordFileFragment = FileListFragment.newInstance(MEDIA_DIR);
-		mSavedFileFragment = FileListFragment.newInstance(SAVED_DIR);
+		mStorageDir = ExternalStorage.getStorageDirectory();
+		if (mStorageDir.type == ExternalStorage.PRIMARY_STORAGE)
+			noSecondaryStorage = true;
 		
+		mStorageSizeText = (TextView)findViewById(R.id.storage_size_text);
+		mDirectorySizeText = (TextView)findViewById(R.id.dir_size_text);
+		
+		mPreviewButton = (Button)findViewById(R.id.preview_btn);
+		mPreviewButton.setOnClickListener(this);
+				
+		mSaveButton = (ToggleButton)findViewById(R.id.save_btn);
+		mSaveButton.setOnClickListener(this);
+				
+		mDeleteButton = (Button)findViewById(R.id.delete_btn);
+		mDeleteButton.setOnClickListener(this);
+		
+		LinearLayout ll = (LinearLayout)findViewById(R.id.button_layout);
+		if (noSecondaryStorage)
+			ll.setVisibility(View.GONE);
+
 		final ActionBar bar = getActionBar();
 		bar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
         bar.setDisplayOptions(ActionBar.DISPLAY_SHOW_TITLE, 0);
@@ -71,130 +82,97 @@ public class MainActivity extends Activity implements ActionBar.TabListener {
         bar.addTab(bar.newTab().setText(getString(R.string.saved_tab)).
         			setTabListener(this).setContentDescription(SAVED_FILE_TAB));
         
-        isRecording = isRecordServiceRunning(this);
-			    
-	    receiver = new StatusReceiver();  
+        if (savedInstanceState != null) 
+            bar.setSelectedNavigationItem(savedInstanceState.getInt("tab", 0));
+        
+        Fragment f = getFragmentManager().findFragmentByTag(RECORD_FILE_TAB);
+        if (f != null && !f.isDetached()) {
+            FragmentTransaction ft =getFragmentManager().beginTransaction();
+            ft.detach(f);
+            ft.commit();
+        }
+        
+        f = getFragmentManager().findFragmentByTag(SAVED_FILE_TAB);
+        if (f != null && !f.isDetached()) {
+            FragmentTransaction ft =getFragmentManager().beginTransaction();
+            ft.detach(f);
+            ft.commit();
+        }
+             
+        receiver = new StatusReceiver();  
         IntentFilter filter = new IntentFilter();  
-        filter.addAction("android.intent.action.REFRESH");  
+        filter.addAction(RecordService.REFRESH_ACTION);
+        filter.addAction(RecordService.STATUS_ACTION);
         registerReceiver(receiver, filter);  
         
         DisplayStorageSize();
         timer.postDelayed(timerRunnable, 1000);
- 	}
+   	}
 
 	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		MenuInflater inflater = getMenuInflater();
-		inflater.inflate(R.menu.actions, menu);
-		
-		return true;
-	}
-	
-	@Override  
-    public boolean onPrepareOptionsMenu(Menu menu) {  
-		if (isRecording) {
-			menu.findItem(R.id.action_rec).
-				setIcon(android.R.drawable.ic_media_pause);
-			
-			menu.findItem(R.id.action_preview).setVisible(true);
-		} else {
-			menu.findItem(R.id.action_rec).
-				setIcon(android.R.drawable.ic_media_play);
-			
-			menu.findItem(R.id.action_preview).setVisible(false);
-		}	
-		
-		if (saveFile)
-			menu.findItem(R.id.action_save).
-				setIcon(R.drawable.ic_check_on);
-		else
-			menu.findItem(R.id.action_save).
-				setIcon(R.drawable.ic_check_off);
-		
-		return super.onPrepareOptionsMenu(menu);  
-	}
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt("tab", getActionBar().getSelectedNavigationIndex());
+    }
 	
 	@Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-		Intent intent;
-		String action;
-		
-        switch (item.getItemId()) {
-        case R.id.action_rec:
-        	if (!isRecording) {
-        		isRecording = true;
-        		
-        		intent = new Intent(MainActivity.this, RecordService.class);
-        		action = saveFile ? 
-							RecordService.SAVE_FILE_ACTION : 
-							RecordService.UNSAVE_FILE_ACTION; 
-        		intent.setAction(action);
-        		
-           		startService(intent);
-        	} else {
-        		isRecording = false;
-        		intent = new Intent(MainActivity.this, RecordService.class);
-        		stopService(intent);
-        	}
-        	
-        	getWindow().invalidatePanelMenu(Window.FEATURE_OPTIONS_PANEL);
-        	break;
-        	
-        case R.id.action_preview:
-        	intent = new Intent(MainActivity.this, RecordService.class);
-    		action = RecordService.PREVIEW_ACTION; 
+    public void	onClick(View v) {
+		if (v == mPreviewButton) {
+			Intent intent = new Intent(MainActivity.this, RecordService.class);
+    		String action = RecordService.PREVIEW_ACTION; 
     		intent.setAction(action);
     		startService(intent);
-        	break;
+		} else if (v == mSaveButton) {
+			saveFile = !saveFile;
         	
-        case R.id.action_delete:
-        	DialogFragment newFragment = 
-        			AlertDialogFragment.newInstance(R.string.alert_dialog_title);
-            newFragment.show(getFragmentManager(), "dialog");
-        	break; 
-        
-        case R.id.action_save:
-        	saveFile = !saveFile;
-        	
-        	if (isRecording) {
-        		intent = new Intent(MainActivity.this, RecordService.class);
-        		action = saveFile ? 
+			Intent intent = new Intent(MainActivity.this, RecordService.class);
+			String action = saveFile ? 
         					RecordService.SAVE_FILE_ACTION : 
         					RecordService.UNSAVE_FILE_ACTION; 
-        		intent.setAction(action);
-        		startService(intent);
-        	}
-        	
-        	getWindow().invalidatePanelMenu(Window.FEATURE_OPTIONS_PANEL);
-           	break;
-        
-        /*case R.id.action_close:
-        	finish();
-        	break; */
-        	
-        default: ;	
-        }
-        
-        return true;
-    }
+			intent.setAction(action);
+			startService(intent);
+		} else if (v == mDeleteButton) {
+			DialogFragment newFragment = 
+        			AlertDialogFragment.newInstance(R.string.alert_dialog_title);
+            newFragment.show(getFragmentManager(), "dialog");
+		}	
+	}
 	 
 	@Override
     protected void onResume() {                                                                                                                                                                                                                                                      
         super.onResume();
+        
+        if (!noSecondaryStorage) {
+        	Intent intent = new Intent(MainActivity.this, RecordService.class);
+        	intent.setAction(RecordService.CHECK_STATUS_ACTION);
+        	startService(intent);
+        }	
+        
+        if (mRecordFileFragment != null)
+        	mRecordFileFragment.refreshFileList();
+        
+        if (mSavedFileFragment != null)
+        	mSavedFileFragment.refreshFileList();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         
-        if (isRecording) {
+        if (!noSecondaryStorage) {
         	Intent intent = new Intent(MainActivity.this, RecordService.class);
-    		String action = RecordService.CLOSE_PREVIEW_ACTION; 
-    		intent.setAction(action);
-    		startService(intent);
-        }
+        	String action = RecordService.CLOSE_PREVIEW_ACTION; 
+        	intent.setAction(action);
+        	startService(intent);
+        }	
     }
-     
+    
+    @Override
+    protected void onDestroy() {
+    	super.onDestroy();
+    	unregisterReceiver(receiver);  
+    }
+    
     @Override
     public void onTabReselected(ActionBar.Tab tab, FragmentTransaction ft) {
     	
@@ -202,22 +180,45 @@ public class MainActivity extends Activity implements ActionBar.TabListener {
     
     @Override
     public void onTabSelected(ActionBar.Tab tab, FragmentTransaction ft) {
-    	if(RECORD_FILE_TAB.equals(tab.getContentDescription())) 
-    		ft.add(R.id.list_file_layout, mRecordFileFragment, RECORD_FILE_TAB);
-    	else if (SAVED_FILE_TAB.equals(tab.getContentDescription())) 
-    		ft.add(R.id.list_file_layout, mSavedFileFragment, SAVED_FILE_TAB);
+    	if(RECORD_FILE_TAB.equals(tab.getContentDescription())) {
+    		if (mRecordFileFragment == null) {
+    			String path = noSecondaryStorage ? null : 
+    								mStorageDir.directory.getPath() + "/" +
+    								StoragePath.CYCLE_DIR;
+    			
+    			mRecordFileFragment = FileListFragment.newInstance(path);
+    			ft.add(R.id.list_file_layout, mRecordFileFragment, RECORD_FILE_TAB);
+    		} else {
+    			ft.attach(mRecordFileFragment);
+    		}	
+    	} else if (SAVED_FILE_TAB.equals(tab.getContentDescription())) {
+    		if (mSavedFileFragment == null) {
+    			String path = noSecondaryStorage ? null : 
+									mStorageDir.directory.getPath() + "/" +
+									StoragePath.SAVE_DIR;
+    			
+    			mSavedFileFragment = FileListFragment.newInstance(path);
+    			ft.add(R.id.list_file_layout, mSavedFileFragment, SAVED_FILE_TAB);
+    		} else {
+    			ft.attach(mSavedFileFragment);
+    		}	
+    	}	
     }
     
     @Override
     public void onTabUnselected(ActionBar.Tab tab, FragmentTransaction ft) {
-    	if(RECORD_FILE_TAB.equals(tab.getContentDescription())) 
-    		ft.remove(mRecordFileFragment);
-    	else if (SAVED_FILE_TAB.equals(tab.getContentDescription())) 
-    		ft.remove(mSavedFileFragment);
+    	if(RECORD_FILE_TAB.equals(tab.getContentDescription())) {
+    		if (mRecordFileFragment != null)
+    			ft.detach(mRecordFileFragment);
+    	} else if (SAVED_FILE_TAB.equals(tab.getContentDescription())) { 
+    		if (mSavedFileFragment != null)
+    			ft.detach(mSavedFileFragment);
+    	}	
     }
-   
-    public boolean isRecordServiceRunning(Context context) {  
-    	ActivityManager manager = (ActivityManager)context.
+ 
+/*    
+    private boolean isRecordServiceRunning() {  
+    	ActivityManager manager = (ActivityManager)this.
     							getSystemService(Context.ACTIVITY_SERVICE);
     	
     	for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {  
@@ -227,19 +228,34 @@ public class MainActivity extends Activity implements ActionBar.TabListener {
     	
         return false;  
     } 
+ */   
     
     private class StatusReceiver extends BroadcastReceiver {  
         @Override  
-        public void onReceive(Context context, Intent intent) {  
-        	ActionBar.Tab tab = getActionBar().getSelectedTab();
+        public void onReceive(Context context, Intent intent) {
+        	String action = intent.getAction();
         	
-        	if (RECORD_FILE_TAB.equals(tab.getContentDescription())) 
-        		mRecordFileFragment.refreshFileList();
-        	else if (SAVED_FILE_TAB.equals(tab.getContentDescription())) 	
-        	   	mSavedFileFragment.refreshFileList();
+        	if (action.equals(RecordService.REFRESH_ACTION)) {
+        		ActionBar.Tab tab = getActionBar().getSelectedTab();
         	
-        	isRecording = isRecordServiceRunning(getApplication());
-        	getWindow().invalidatePanelMenu(Window.FEATURE_OPTIONS_PANEL);
+        		if (RECORD_FILE_TAB.equals(tab.getContentDescription())) 
+        			mRecordFileFragment.refreshFileList();
+        		else if (SAVED_FILE_TAB.equals(tab.getContentDescription())) 	
+        			mSavedFileFragment.refreshFileList();
+        		
+        		long cycleTotal = intent.getExtras().getLong("cycle_total");
+        		long cycleAvail = intent.getExtras().getLong("cycle_avail");
+        		long resTotal = intent.getExtras().getLong("save_total");
+        		long resAvail = intent.getExtras().getLong("save_avail");
+        		
+        		DisplayDirectorySize(cycleTotal, cycleAvail, resTotal, resAvail);
+        	} else if (action.equals(RecordService.STATUS_ACTION)) {
+        		int s = intent.getExtras().getInt("status");
+        		if (s != 0) {
+        			mSaveButton.setChecked(true);
+        			saveFile = true;
+        		}	
+        	}
         }  
     }  
     
@@ -248,7 +264,10 @@ public class MainActivity extends Activity implements ActionBar.TabListener {
     		public void run() {
     			try {
     				ArrayList<RecordFileList.FileInfo> fileList = 
-    							RecordFileList.getFilelist(SAVED_DIR, ".mp4");
+    							RecordFileList.getFilelist(mStorageDir.directory.getPath() + 
+    														"/" +
+    														StoragePath.SAVE_DIR, 
+															".mp4");
 		
     				for (RecordFileList.FileInfo fileInfo : fileList) {
     					File file = new File(fileInfo.path);
@@ -336,12 +355,35 @@ public class MainActivity extends Activity implements ActionBar.TabListener {
 	}
 	
 	private void DisplayStorageSize() {
-		long totalSize = ExternalStorageHelper.getTotalExternalStorageSize();
-    	long avaSize = ExternalStorageHelper.getAvailableExternalStorageSize();
+		String info;
+		
+		if (noSecondaryStorage) {
+			info = "没有存储卡";
+		} else {
+			long totalSize = ExternalStorage.
+								getTotalStorageSize(mStorageDir.directory.
+													getPath());
+			long avaSize = ExternalStorage.
+    							getAvailableStorageSize(mStorageDir.directory.
+    													getPath());
     	
-    	mStatusView.setText(" 存储空间容量: " + totalSize/1024/1024 + "MB " +
-    						"    " + 
-    						"可用存储空间: " + avaSize/1024/1024 + "MB");
+			info = "SD  Total: " + totalSize/1024/1024 + "MB" +
+					"   " + 
+					"Available: " + avaSize/1024/1024 + "MB";
+		}
+    	
+		mStorageSizeText.setText(info);
+	}
+	
+	private void DisplayDirectorySize(long cycleTotal, long cycleAvail, long saveTotal, long saveAvail) {
+		String info;
+		
+		info = "Cycle Total: " + cycleTotal/1024/1024 + "MB" +
+				"  " + "Cycle Available: " + cycleAvail/1024/1024 + "MB" +
+				"    " + "Res Total: " + saveTotal/1024/1024 + "MB" +
+				"  " + "Res Available: " + saveAvail/1024/1024 + "MB";
+		
+		mDirectorySizeText.setText(info);
 	}
 	
 	Handler timer = new Handler();  

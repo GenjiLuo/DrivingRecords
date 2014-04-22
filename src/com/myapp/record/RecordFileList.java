@@ -6,13 +6,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 
-import android.os.Environment;
 
 public class RecordFileList {
 	
-	public static ArrayList<FileInfo> getFilelist(String dir, String ext) {
-		File storageDir = new File(Environment.getExternalStorageDirectory(), dir);
+	public static ArrayList<FileInfo> getFilelist(String dirPath, String ext) {
+		if (dirPath == null)
+			return null;
+		
+		File storageDir = new File(dirPath);
 		File[] files =storageDir.listFiles(getFileExtensionFilter(ext));
+		if (files == null)
+			return null;
 		
 		ArrayList<FileInfo> fileList = new ArrayList<FileInfo>();
 		
@@ -21,15 +25,16 @@ public class RecordFileList {
             FileInfo fileInfo = new FileInfo();  
             fileInfo.name = file.getName();  
             fileInfo.path = file.getPath();  
-            fileInfo.lastModified= file.lastModified();   
+            fileInfo.lastModified= file.lastModified();  
+            fileInfo.title = fileInfo.name;
             
-            String s[] = fileInfo.name.split("-");
-            fileInfo.title = s[1].substring(0, 4) + "/"
-            				+ s[1].substring(4, 6) +"/"
-            				+ s[1].substring(6, 8) + " "
-            				+ s[2].substring(0, 2) + ":"
-            				+ s[2].substring(2, 4) + ":"
-            				+ s[2].substring(4, 6);
+            //String s[] = fileInfo.name.split("-");
+            //fileInfo.title = s[1].substring(0, 4) + "/"
+            //				+ s[1].substring(4, 6) +"/"
+            //				+ s[1].substring(6, 8) + " "
+            //				+ s[2].substring(0, 2) + ":"
+            //				+ s[2].substring(2, 4) + ":"
+            //				+ s[2].substring(4, 6);
             
             fileList.add(fileInfo);  
         }  
@@ -53,9 +58,9 @@ public class RecordFileList {
 		@Override
         public int compare(FileInfo file1, FileInfo file2) {  
         	if(file1.lastModified < file2.lastModified)   
-            	return -1;  
-            else 
             	return 1;  
+            else 
+            	return -1;  
         }  
     }  
 	
