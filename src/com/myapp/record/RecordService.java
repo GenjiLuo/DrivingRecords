@@ -20,6 +20,7 @@ import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.media.MediaRecorder.OutputFormat;
 import android.media.MediaRecorder.VideoEncoder;
+import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.Gravity;
@@ -48,9 +49,14 @@ public class RecordService extends Service implements
 	public static final String STATUS_ACTION = "android.intent.action.STATUS";
 	
 	private static final int NOTIFICATION_ID = 1;
+	
     private static final int REC_DURATION = 3*60*1000;
+    
     private static final long GIGABYTES = 1024*1024*1024;
     private static final long RES_SIZE = 5*GIGABYTES;
+    
+    private static final int RESTART_TIME = 1000*60;
+    private static final int FREEZE_CHECK_TIME = REC_DURATION + 30*1000;
     
     private MediaRecorder mMr = null;
     private Camera mCam = null;
@@ -66,6 +72,13 @@ public class RecordService extends Service implements
     						mSaveDir = new MediaDirectory();   
     private ExternalStorage.StorageDirectory mStorage;
     private boolean mNoSdCard;
+    private Handler mRestartTimer = new Handler(),
+    				mFreezeCheckTimer = new Handler(); 
+    private RestartRecord mRestart = new RestartRecord();
+    private FreezeCheck mFreezeCheck = new FreezeCheck();
+    private int mPrevRecCounter = 0, mRecCounter = 0;
+    private boolean mNeedRestart = false;
+    
     
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
@@ -92,52 +105,20 @@ public class RecordService extends Service implements
 		        i.setAction(STATUS_ACTION);
 		        i.putExtra("status", mSaveFileFlag ? 1 : 0);
 		        sendBroadcast(i);
+		        
+		        sendRefreshStatus();
 			}
 		}	
 		
 		// We want this service to continue running until it is explicitly
 		// stopped, so return sticky.
-		return START_NOT_STICKY;
+		return START_STICKY;
 	}
 	
 	@Override
 	public void onCreate() {
-		mStorage = ExternalStorage.getStorageDirectory();
-		mNoSdCard = mStorage.type == ExternalStorage.PRIMARY_STORAGE ? 
-						true : false;
+		Log.i(TAG, "RecordService start");
 		
-		long totalStorageSize = ExternalStorage.
-								getTotalStorageSize(mStorage.
-													directory.
-													getPath());
-		if (totalStorageSize > RES_SIZE)
-			totalStorageSize -= RES_SIZE;
-		else
-			mNoSdCard = true;
-		
- 		String path = mStorage.directory.getPath() + "/" + StoragePath.CYCLE_DIR;
-		mCycleDir.directory = new File(path);
-		mCycleDir.available = mCycleDir.totalSize = totalStorageSize/2;
-		if (!mCycleDir.directory.exists())
-			mCycleDir.directory.mkdirs();
-		
-		path = mStorage.directory.getPath() + "/" + StoragePath.SAVE_DIR;
-		mSaveDir.directory = new File(path);
-		mSaveDir.available = mSaveDir.totalSize = totalStorageSize/2;
-		if (!mSaveDir.directory.exists())
-			mSaveDir.directory.mkdirs();
-        
-        File tempDir = new File(mStorage.directory, StoragePath.TEMP_DIR);
-        if (!tempDir.exists()) 
-        	tempDir.mkdirs();
-        else {
-        	File[] files = tempDir.listFiles();
-        	if (files != null) {
-        		for (int i = 0; i < files.length; i++) 
-        			files[i].delete();
-        	}	
-        }
-        
 		// Start foreground service to avoid unexpected kill
         Notification notification = new Notification.Builder(this)
             .setContentTitle("Background Video Recorder")
@@ -145,8 +126,16 @@ public class RecordService extends Service implements
             .setSmallIcon(R.drawable.ic_launcher)
             .build();
         startForeground(NOTIFICATION_ID, notification);
-
-        // Create new SurfaceView, set its size to 1x1, 
+        
+		mNoSdCard = !checkStorage();	
+		if (mNoSdCard) {
+			Log.i(TAG, "No valid storage");
+			mRestartTimer.postDelayed(mRestart, RESTART_TIME);
+		} else {
+			mFreezeCheckTimer.postDelayed(mFreezeCheck, FREEZE_CHECK_TIME);
+		}
+	        
+		// Create new SurfaceView, set its size to 1x1, 
         // move it to the top left corner and set this service as a callback
         windowManager = (WindowManager) this.getSystemService(Context.WINDOW_SERVICE);
         
@@ -156,7 +145,7 @@ public class RecordService extends Service implements
         
         LayoutInflater inflater = LayoutInflater.from(getApplication());  
         previewLayout = (FrameLayout) inflater.inflate(R.layout.camera_preview, null);
-        previewLayout.setBackgroundColor(getResources().getColor(R.color.black));
+        //previewLayout.setBackgroundColor(getResources().getColor(R.color.black));
         previewLayout.setOnClickListener(this);
         
         mlayoutParams = new WindowManager.LayoutParams(
@@ -169,6 +158,7 @@ public class RecordService extends Service implements
         windowManager.addView(previewLayout, mlayoutParams);
         
         previewSurface = (CameraPreview)previewLayout.findViewById(R.id.preview_surface);
+        previewSurface.setBackgroundColor(getResources().getColor(R.color.solid_blue));
         
         mHolder = previewSurface.getHolder();
         mHolder.addCallback(this);
@@ -177,6 +167,8 @@ public class RecordService extends Service implements
     // Stop recording and remove SurfaceView
     @Override
     public void onDestroy() {
+    	Log.i(TAG, "RecordService stopped");
+    	
     	if (!mNoSdCard) {
     		stopRecord();
     		releaseMediaRecorder();
@@ -185,6 +177,16 @@ public class RecordService extends Service implements
     	}   
     	
     	windowManager.removeView(previewLayout);
+    	
+    	mRestartTimer.removeCallbacks(mRestart);
+    	mFreezeCheckTimer.removeCallbacks(mFreezeCheck);
+    	
+    	if (mNeedRestart) {
+    		Log.i(TAG, "Restart service");
+    		
+    		Intent intent = new Intent(getApplication(), RecordService.class);
+            startService(intent);
+    	}
     }
     
     @Override
@@ -348,14 +350,18 @@ public class RecordService extends Service implements
     	if (!ret)
     		stopSelf();
     	
+    	previewSurface.setBackgroundColor(0x00000000);
+    	
     	if (prepareCamera() && prepareVideoRecorder())
     		mMr.start();
     }
     
     private void stopRecord() {
+    	previewSurface.setBackgroundColor(getResources().
+    										getColor(R.color.solid_blue));
+    	
     	mMr.stop();
 		mMr.reset();
-		releaseCamera();
 		
 		saveFile(mSaveFileFlag);
     }
@@ -390,6 +396,8 @@ public class RecordService extends Service implements
      		
        		if (prepareVideoRecorder()) 
     			mMr.start();
+       		
+       		mRecCounter++;
     	}
     }
     
@@ -492,9 +500,94 @@ public class RecordService extends Service implements
 		return mSaveFileFlag ? mSaveDir : mCycleDir; 
 	}
 	
+	private void deleteTempFiles() {
+		File tempDir = new File(mStorage.directory, StoragePath.TEMP_DIR);
+		
+		File[] files = tempDir.listFiles();
+    	if (files != null) {
+    		for (int i = 0; i < files.length; i++) 
+    			files[i].delete();
+    	}	
+	}
+	
+	private boolean checkStorage() {
+		ExternalStorage.StorageDirectory storage;
+		
+		storage = ExternalStorage.getStorageDirectory();
+		if (storage.type == ExternalStorage.PRIMARY_STORAGE)
+			return false;
+		
+		long totalStorageSize = ExternalStorage.
+								getTotalStorageSize(storage.
+													directory.
+													getPath());
+		if (totalStorageSize > RES_SIZE)
+			totalStorageSize -= RES_SIZE;
+		else 
+			return false;
+		
+		mStorage = storage;
+		
+		String path = mStorage.directory.getPath() + "/" + StoragePath.CYCLE_DIR;
+		mCycleDir.directory = new File(path);
+		mCycleDir.totalSize = totalStorageSize/2;
+		mCycleDir.available = mCycleDir.totalSize - getFileSize(mCycleDir.directory);
+		if (!mCycleDir.directory.exists())
+			mCycleDir.directory.mkdirs();
+		
+		path = mStorage.directory.getPath() + "/" + StoragePath.SAVE_DIR;
+		mSaveDir.directory = new File(path);
+		mSaveDir.totalSize = totalStorageSize/2;
+		mSaveDir.available = mSaveDir.totalSize - getFileSize(mSaveDir.directory);
+		if (!mSaveDir.directory.exists())
+			mSaveDir.directory.mkdirs();
+        
+        File tempDir = new File(mStorage.directory, StoragePath.TEMP_DIR);
+        if (!tempDir.exists()) 
+        	tempDir.mkdirs();
+        else 
+        	deleteTempFiles();
+        
+        return true;
+	}
+	
 	private class MediaDirectory {
 		File directory;
 		long totalSize;
 		long available;
+	}
+	
+	private class RestartRecord implements Runnable {
+		@Override  
+	    public void run() {  
+			Log.i(TAG, "Recheck storage");
+			
+			mNoSdCard = !checkStorage();
+			if (mNoSdCard)
+				mRestartTimer.postDelayed(this, RESTART_TIME);
+			else {
+				Log.i(TAG, "Restart record");
+				mFreezeCheckTimer.postDelayed(mFreezeCheck, FREEZE_CHECK_TIME);
+				startRecord();
+			}	
+		}
+	}
+	
+	private class FreezeCheck implements Runnable {
+		@Override  
+	    public void run() {  
+			Log.i(TAG, "FreezeCheck");
+			
+			if (mPrevRecCounter == mRecCounter) {
+				Log.i(TAG, "Detected freeze");
+				stopSelf();
+				mNeedRestart = true;
+				return;
+			}	
+			
+			mPrevRecCounter = mRecCounter;
+			
+			mFreezeCheckTimer.postDelayed(this, FREEZE_CHECK_TIME);
+		}
 	}
 }

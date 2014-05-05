@@ -142,11 +142,9 @@ public class MainActivity extends Activity implements
     protected void onResume() {                                                                                                                                                                                                                                                      
         super.onResume();
         
-        if (!noSecondaryStorage) {
-        	Intent intent = new Intent(MainActivity.this, RecordService.class);
-        	intent.setAction(RecordService.CHECK_STATUS_ACTION);
-        	startService(intent);
-        }	
+        Intent intent = new Intent(MainActivity.this, RecordService.class);
+        intent.setAction(RecordService.CHECK_STATUS_ACTION);
+        startService(intent);
         
         if (mRecordFileFragment != null)
         	mRecordFileFragment.refreshFileList();
@@ -159,12 +157,10 @@ public class MainActivity extends Activity implements
     protected void onPause() {
         super.onPause();
         
-        if (!noSecondaryStorage) {
-        	Intent intent = new Intent(MainActivity.this, RecordService.class);
-        	String action = RecordService.CLOSE_PREVIEW_ACTION; 
-        	intent.setAction(action);
-        	startService(intent);
-        }	
+        Intent intent = new Intent(MainActivity.this, RecordService.class);
+        String action = RecordService.CLOSE_PREVIEW_ACTION; 
+        intent.setAction(action);
+        startService(intent);
     }
     
     @Override
@@ -367,9 +363,9 @@ public class MainActivity extends Activity implements
     							getAvailableStorageSize(mStorageDir.directory.
     													getPath());
     	
-			info = "SD  Total: " + totalSize/1024/1024 + "MB" +
+			info = "SD Total: " + totalSize/1024/1024 + "MB" +
 					"   " + 
-					"Available: " + avaSize/1024/1024 + "MB";
+					"SD Available: " + avaSize/1024/1024 + "MB";
 		}
     	
 		mStorageSizeText.setText(info);
