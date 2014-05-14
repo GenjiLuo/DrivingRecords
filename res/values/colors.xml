@@ -29,5 +29,7 @@
     <color name="solid_green">#f0f0</color>
     <color name="solid_yellow">#ffffff00</color>
     <color name="black">#ff000000</color>
+    
+    <color name="gray">#ffe0e0e0</color>
 
 </resources>

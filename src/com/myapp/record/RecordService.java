@@ -70,7 +70,7 @@ public class RecordService extends Service implements
     private String mTempFileName;
     private MediaDirectory mCycleDir = new MediaDirectory(), 
     						mSaveDir = new MediaDirectory();   
-    private ExternalStorage.StorageDirectory mStorage;
+    private String mStorage;
     private boolean mNoSdCard;
     private Handler mRestartTimer = new Handler(),
     				mFreezeCheckTimer = new Handler(); 
@@ -332,8 +332,7 @@ public class RecordService extends Service implements
 	
 	/** Create a File for saving an image or video */
     private String getOutputMediaFileName() {
-        File mediaStorageDir = new File(mStorage.directory.getPath() + "/" +
-        									StoragePath.TEMP_DIR);
+        File mediaStorageDir = new File(mStorage, StoragePath.TEMP_DIR);
         
         // Create a media file name
         String timeStamp = new SimpleDateFormat("yyyyMMdd-HHmmss", 
@@ -424,7 +423,7 @@ public class RecordService extends Service implements
     }
     
     private void saveFile(boolean save) {
-    	if (!ExternalStorage.checkAvailable(mStorage.directory.getPath()))
+    	if (!ExternalStorage.checkAvailable(mStorage))
     		return;
     	
     	File file = new File(mTempFileName);
@@ -501,7 +500,7 @@ public class RecordService extends Service implements
 	}
 	
 	private void deleteTempFiles() {
-		File tempDir = new File(mStorage.directory, StoragePath.TEMP_DIR);
+		File tempDir = new File(mStorage, StoragePath.TEMP_DIR);
 		
 		File[] files = tempDir.listFiles();
     	if (files != null) {
@@ -511,16 +510,14 @@ public class RecordService extends Service implements
 	}
 	
 	private boolean checkStorage() {
-		ExternalStorage.StorageDirectory storage;
+		String storage;
 		
 		storage = ExternalStorage.getStorageDirectory();
-		if (storage.type == ExternalStorage.PRIMARY_STORAGE)
+		if (storage == null)
 			return false;
 		
 		long totalStorageSize = ExternalStorage.
-								getTotalStorageSize(storage.
-													directory.
-													getPath());
+								getTotalStorageSize(storage);
 		if (totalStorageSize > RES_SIZE)
 			totalStorageSize -= RES_SIZE;
 		else 
@@ -528,21 +525,21 @@ public class RecordService extends Service implements
 		
 		mStorage = storage;
 		
-		String path = mStorage.directory.getPath() + "/" + StoragePath.CYCLE_DIR;
+		String path = mStorage + "/" + StoragePath.CYCLE_DIR;
 		mCycleDir.directory = new File(path);
 		mCycleDir.totalSize = totalStorageSize/2;
 		mCycleDir.available = mCycleDir.totalSize - getFileSize(mCycleDir.directory);
 		if (!mCycleDir.directory.exists())
 			mCycleDir.directory.mkdirs();
 		
-		path = mStorage.directory.getPath() + "/" + StoragePath.SAVE_DIR;
+		path = mStorage + "/" + StoragePath.SAVE_DIR;
 		mSaveDir.directory = new File(path);
 		mSaveDir.totalSize = totalStorageSize/2;
 		mSaveDir.available = mSaveDir.totalSize - getFileSize(mSaveDir.directory);
 		if (!mSaveDir.directory.exists())
 			mSaveDir.directory.mkdirs();
         
-        File tempDir = new File(mStorage.directory, StoragePath.TEMP_DIR);
+       	File tempDir = new File(mStorage, StoragePath.TEMP_DIR);
         if (!tempDir.exists()) 
         	tempDir.mkdirs();
         else 
