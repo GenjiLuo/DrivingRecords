@@ -111,11 +111,13 @@ public class BitmapCache {
             }
         }
 	}
+	
+	public static Bitmap getBitmapFromMemoryCache(String key) {
+		return mMemoryCache.get(key);
+	}
 
-	public static Bitmap getBitmapFromCache(String key) {
-		Bitmap bitmap = mMemoryCache.get(key);
-		if (bitmap != null)
-			return bitmap;
+	public static Bitmap getBitmapFromDiskCache(String key) {
+		Bitmap bitmap = null;
 		
 		synchronized (mDiskCacheLock) {
             while (mDiskCacheStarting) {
@@ -130,21 +132,15 @@ public class BitmapCache {
                 try {
                     final DiskLruCache.Snapshot snapshot = mDiskCache.get(key);
                     if (snapshot != null) {
-                        //if (BuildConfig.DEBUG) {
-                            //Log.d(TAG, "Disk cache hit");
-                        //}
                         inputStream = snapshot.getInputStream(DISK_CACHE_INDEX);
                         if (inputStream != null) {
                             FileDescriptor fd = ((FileInputStream) inputStream).getFD();
- 
-                            // Decode bitmap, but we don't want to sample so give
-                            // MAX_VALUE as the target dimensions
                             bitmap = BitmapFactory.decodeFileDescriptor(fd);
                             mMemoryCache.put(key, bitmap);
                         }
                     }
                 } catch (final IOException e) {
-                    //Log.e(TAG, "getBitmapFromDiskCache - " + e);
+
                 } finally {
                     try {
                         if (inputStream != null) {

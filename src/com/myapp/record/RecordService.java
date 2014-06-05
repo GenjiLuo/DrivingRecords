@@ -35,8 +35,6 @@ import android.widget.Toast;
 
 public class RecordService extends Service implements 
 							SurfaceHolder.Callback, 
-							MediaRecorder.OnInfoListener,
-							MediaRecorder.OnErrorListener, 
 							View.OnClickListener {
 	
 	private static final String TAG = "RecordService";
@@ -46,7 +44,7 @@ public class RecordService extends Service implements
 	public static final String PREVIEW_ACTION = "com.myapp.action.PREVIEW";
 	public static final String CLOSE_PREVIEW_ACTION = "com.myapp.action.CLOSE_PREVIEW";
 	public static final String REFRESH_ACTION = "android.intent.action.REFRESH";
-	public static final String STATUS_ACTION = "android.intent.action.STATUS";
+	//public static final String STATUS_ACTION = "android.intent.action.STATUS";
 	
 	private static final int NOTIFICATION_ID = 1;
 	
@@ -55,8 +53,7 @@ public class RecordService extends Service implements
     private static final long GIGABYTES = 1024*1024*1024;
     private static final long RES_SIZE = 5*GIGABYTES;
     
-    private static final int RESTART_TIME = 1000*60;
-    private static final int FREEZE_CHECK_TIME = REC_DURATION + 30*1000;
+    private static final int RESTART_TIME = 1000*10;
     
     private MediaRecorder mMr = null;
     private Camera mCam = null;
@@ -72,11 +69,8 @@ public class RecordService extends Service implements
     						mSaveDir = new MediaDirectory();   
     private String mStorage;
     private boolean mNoSdCard;
-    private Handler mRestartTimer = new Handler(),
-    				mFreezeCheckTimer = new Handler(); 
+    private Handler mRestartTimer = new Handler(); 
     private RestartRecord mRestart = new RestartRecord();
-    private FreezeCheck mFreezeCheck = new FreezeCheck();
-    private int mPrevRecCounter = 0, mRecCounter = 0;
     private boolean mNeedRestart = false;
     
     
@@ -101,12 +95,7 @@ public class RecordService extends Service implements
 		    		windowManager.updateViewLayout(previewLayout, mlayoutParams);  
 				}
 			} else if (action.equals(CHECK_STATUS_ACTION)) {
-				Intent i = new Intent();  
-		        i.setAction(STATUS_ACTION);
-		        i.putExtra("status", mSaveFileFlag ? 1 : 0);
-		        sendBroadcast(i);
-		        
-		        sendRefreshStatus();
+				sendRefreshStatus();
 			}
 		}	
 		
@@ -131,17 +120,15 @@ public class RecordService extends Service implements
 		if (mNoSdCard) {
 			Log.i(TAG, "No valid storage");
 			mRestartTimer.postDelayed(mRestart, RESTART_TIME);
-		} else {
-			mFreezeCheckTimer.postDelayed(mFreezeCheck, FREEZE_CHECK_TIME);
-		}
+		} 
 	        
 		// Create new SurfaceView, set its size to 1x1, 
         // move it to the top left corner and set this service as a callback
         windowManager = (WindowManager) this.getSystemService(Context.WINDOW_SERVICE);
         
         mMr = new MediaRecorder();
-        mMr.setOnInfoListener(this);
-        mMr.setOnInfoListener(this);
+        mMr.setOnInfoListener(mRecorderInfoListener);
+        mMr.setOnErrorListener(mRecorderErrorListener);
         
         LayoutInflater inflater = LayoutInflater.from(getApplication());  
         previewLayout = (FrameLayout) inflater.inflate(R.layout.camera_preview, null);
@@ -179,7 +166,6 @@ public class RecordService extends Service implements
     	windowManager.removeView(previewLayout);
     	
     	mRestartTimer.removeCallbacks(mRestart);
-    	mFreezeCheckTimer.removeCallbacks(mFreezeCheck);
     	
     	if (mNeedRestart) {
     		Log.i(TAG, "Restart service");
@@ -362,7 +348,8 @@ public class RecordService extends Service implements
     	mMr.stop();
 		mMr.reset();
 		
-		saveFile(mSaveFileFlag);
+		if (!mNeedRestart)
+			saveFile(mSaveFileFlag);
     }
     
     private void releaseCamera() {
@@ -380,38 +367,37 @@ public class RecordService extends Service implements
         }
     }
     
-    @Override
-    public void onInfo(MediaRecorder mr, int what, int extra) {
-    	if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
-    		mMr.stop();
-    		mMr.reset();
-    		
-    		saveFile(mSaveFileFlag);
-    	
-    		boolean ret = freeStorageSpace(getCurrentDirectory(mSaveFileFlag));
-        	sendRefreshStatus();
-        	if (!ret)
-        		stopSelf();
-     		
-       		if (prepareVideoRecorder()) 
-    			mMr.start();
-       		
-       		mRecCounter++;
+    private MediaRecorder.OnInfoListener mRecorderInfoListener = new MediaRecorder.OnInfoListener() {
+    	@Override
+    	public void onInfo(MediaRecorder mr, int what, int extra) {
+    		if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
+    			mMr.stop();
+    			mMr.reset();
+    	    		
+    			saveFile(mSaveFileFlag);
+    	    	
+    			boolean ret = freeStorageSpace(getCurrentDirectory(mSaveFileFlag));
+    			sendRefreshStatus();
+    			if (!ret)
+    				stopSelf();
+    	     		
+    			if (prepareVideoRecorder()) 
+    				mMr.start();
+     		}
     	}
-    }
-    
-    @Override
-    public void	onError(MediaRecorder mr, int what, int extra) {
-    	Log.e(TAG, "error occurs while recording, error type: " 
-    				+ what + " extra code: " + extra);
-    	
-     	releaseMediaRecorder();
-    	releaseCamera();
-    	windowManager.removeView(previewSurface);
-          
-       	stopSelf();
-    }
-    
+    };
+   
+    private MediaRecorder.OnErrorListener mRecorderErrorListener = new MediaRecorder.OnErrorListener() {
+    	@Override
+        public void	onError(MediaRecorder mr, int what, int extra) {
+        	Log.e(TAG, "error occurs while recording, error type: " 
+        				+ what + " extra code: " + extra);
+        	
+        	mNeedRestart = true;           
+           	stopSelf();
+        }
+    };
+   
     private void sendRefreshStatus() {
     	Intent intent = new Intent();  
         intent.setAction(REFRESH_ACTION); 
@@ -419,6 +405,7 @@ public class RecordService extends Service implements
         intent.putExtra("cycle_avail", mCycleDir.available);
         intent.putExtra("save_total", mSaveDir.totalSize);
         intent.putExtra("save_avail", mSaveDir.available);
+        intent.putExtra("save_status", mSaveFileFlag ? true : false);
         sendBroadcast(intent);  
     }
     
@@ -563,28 +550,11 @@ public class RecordService extends Service implements
 			if (mNoSdCard)
 				mRestartTimer.postDelayed(this, RESTART_TIME);
 			else {
+				sendRefreshStatus();
+				
 				Log.i(TAG, "Restart record");
-				mFreezeCheckTimer.postDelayed(mFreezeCheck, FREEZE_CHECK_TIME);
 				startRecord();
 			}	
-		}
-	}
-	
-	private class FreezeCheck implements Runnable {
-		@Override  
-	    public void run() {  
-			Log.i(TAG, "FreezeCheck");
-			
-			if (mPrevRecCounter == mRecCounter) {
-				Log.i(TAG, "Detected freeze");
-				stopSelf();
-				mNeedRestart = true;
-				return;
-			}	
-			
-			mPrevRecCounter = mRecCounter;
-			
-			mFreezeCheckTimer.postDelayed(this, FREEZE_CHECK_TIME);
 		}
 	}
 }

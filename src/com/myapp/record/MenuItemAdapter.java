@@ -14,12 +14,12 @@ import android.widget.TextView;
 
 public class MenuItemAdapter extends BaseAdapter {
 	private final int mResId[] = {
-		0,	
 		R.drawable.ic_repeat,
 		R.drawable.ic_collections,
 		0,
 		R.drawable.ic_save, 
 		R.drawable.ic_delete, 
+		0,
 		R.drawable.ic_camera
 	};
 	
@@ -64,10 +64,10 @@ public class MenuItemAdapter extends BaseAdapter {
 	
 	@Override
 	public View getView(int position, View convertView, ViewGroup parent) {
-		//ViewHolder holder;
-
 		if (mMenuItem[position].startsWith("-")) 
 			convertView = mInflater.inflate(R.layout.menu_item_separator, null);
+		else if (mMenuItem[position].startsWith("*"))
+			convertView = mInflater.inflate(R.layout.menu_item_bottom, null);	
 		else {
 			if (mResId[position] == R.drawable.ic_save) {
 				convertView = mInflater.inflate(R.layout.menu_item_save_layout, null);
@@ -82,24 +82,6 @@ public class MenuItemAdapter extends BaseAdapter {
 			ImageView image = (ImageView)convertView.findViewById(R.id.menu_item_image);
 			image.setImageBitmap(mIcons[position]);
 		}	
-		
-		/*
-		if (convertView == null) {
-			convertView = mInflater.inflate(R.layout.menu_item_layout, null);
-			convertView.setBackgroundResource(R.drawable.menu_item_selector);
-			
-			holder = new ViewHolder();
-			holder.text = (TextView)convertView.findViewById(R.id.menu_item_text);
-			holder.image = (ImageView)convertView.findViewById(R.id.menu_item_image);
-			holder.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-			
-			convertView.setTag(holder);
-		} else 
-			holder = (ViewHolder) convertView.getTag();
-		
-		holder.text.setText(mMenuItem[position]);
-		holder.image.setImageBitmap(mIcons[position]);
-		*/
 		
 		return convertView;
 	}

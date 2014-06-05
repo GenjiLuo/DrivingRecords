@@ -15,13 +15,14 @@
     <string name="action_bar_title_1">循环录像文件</string>
     <string name="action_bar_title_2">已保留的录像文件</string>
     <string-array name="menu_item_string">
-        <item >--</item>
         <item >循环录像文件</item>
         <item >已保留的录像文件</item>
         <item >--</item>
         <item >保留录像</item>
         <item >删除保留录像</item>
+        <item >--</item>
         <item >视频预览</item>
+        <item >**</item>
     </string-array>
     
 </resources>

@@ -28,7 +28,6 @@ public class GridFileListAdapter extends BaseAdapter
 	private ArrayList<LoadThumbnail> mLoaderList = new ArrayList<LoadThumbnail>();
 	private boolean  mIsScroll = false;
 	private int mContainerWidth;
-	//private static LruCache<String, Bitmap> mThumbnailCache = null;
 
 	public GridFileListAdapter(Context context, GridView gridView) {
 		mGridView = gridView;
@@ -39,26 +38,6 @@ public class GridFileListAdapter extends BaseAdapter
 		View v = ((Activity)context).findViewById(R.id.fragment_container);
 		ViewGroup.LayoutParams params = v.getLayoutParams();
 		mContainerWidth = params.width;
-
-		/*
-		if (mThumbnailCache == null) {
-			// Get max available VM memory, exceeding this amount will throw an
-			// OutOfMemory exception. Stored in kilobytes as LruCache takes an
-			// int in its constructor.
-			final int maxMemory = (int)(Runtime.getRuntime().maxMemory()/1024);
-
-			// Use 1/16th of the available memory for this memory cache.
-			final int cacheSize = maxMemory/16;
-
-			mThumbnailCache = new LruCache<String, Bitmap>(cacheSize) {
-				@Override
-				protected int sizeOf(String key, Bitmap bitmap) {
-					// The cache size will be measured in kilobytes rather than
-					// number of items.
-					return bitmap.getByteCount()/1024;
-				}
-			};
-		}	*/
 	}
 
 	private void notifyChange() {
@@ -104,15 +83,6 @@ public class GridFileListAdapter extends BaseAdapter
 		return position;
 	}
 
-	//private void addBitmapToMemoryCache(String key, Bitmap bitmap) {
-	//	if (getBitmapFromMemCache(key) == null) 
-	//		BitmapCache.mMemoryCache.put(key, bitmap);
-	//}
-
-	//private Bitmap getBitmapFromMemCache(String key) {
-	//	return BitmapCache.mMemoryCache.get(key);
-	//}
-
 	private String convertFileNameToDate(String fileName) {
 		String name[] = fileName.split("\\.");
 		if (name == null || name.length != 2)
@@ -155,7 +125,7 @@ public class GridFileListAdapter extends BaseAdapter
 
 		holder.text.setText(convertFileNameToDate(info.name));
 
-		final Bitmap bitmap = BitmapCache.getBitmapFromCache(info.name);
+		final Bitmap bitmap = BitmapCache.getBitmapFromMemoryCache(info.name);
 		if (bitmap != null) {
 			holder.image.setVisibility(View.VISIBLE);
 			holder.image.setImageBitmap(bitmap);
@@ -184,12 +154,19 @@ public class GridFileListAdapter extends BaseAdapter
 		@Override
 		protected Bitmap doInBackground(RecordFileList.FileInfo ... fileInfo) {
 			mInfo = fileInfo[0];
-
-			Bitmap bitmap = ThumbnailUtils.
+			
+			Bitmap bitmap;
+			
+			bitmap = BitmapCache.getBitmapFromDiskCache(fileInfo[0].name);
+			if (bitmap == null) {
+				Bitmap p = ThumbnailUtils.
 							createVideoThumbnail(fileInfo[0].path, 
 										MediaStore.Video.Thumbnails.MINI_KIND);
-			return Bitmap.createScaledBitmap(bitmap, bitmap.getWidth()/2, 
-											bitmap.getHeight()/2, false);
+				if (p != null)
+					bitmap = Bitmap.createScaledBitmap(p, p.getWidth()/2, p.getHeight()/2, false);
+			}
+			
+			return bitmap;
 		}
 
 		@Override
@@ -205,6 +182,11 @@ public class GridFileListAdapter extends BaseAdapter
 					}	
 				}
 			}
+		}
+		
+		@Override
+		protected void onCancelled(Bitmap result)  {
+			onPostExecute(result);
 		}
 	}
 
@@ -228,7 +210,7 @@ public class GridFileListAdapter extends BaseAdapter
 		for (int i = 0; i < itemCount; i++) {
 			RecordFileList.FileInfo info = mFileList.get(firstItem+i);
 
-			if (BitmapCache.getBitmapFromCache(info.name) == null) { 
+			if (BitmapCache.getBitmapFromMemoryCache(info.name) == null) { 
 				LoadThumbnail loader = new LoadThumbnail(firstItem+i);
 				loader.execute(info);
 				mLoaderList.add(loader);

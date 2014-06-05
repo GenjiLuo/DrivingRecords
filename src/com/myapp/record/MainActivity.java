@@ -15,13 +15,12 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Message;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.AdapterView;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Switch;
@@ -40,7 +39,6 @@ public class MainActivity extends Activity implements
 								mSavedFileFragment = null;
 	private StatusReceiver receiver;  
 	private boolean saveFile = false;
-	private boolean noSecondaryStorage = false;
 	private ProgressDialog pd;
 	private String mStorageDir;
 	private LinearLayout mContainer;
@@ -58,13 +56,7 @@ public class MainActivity extends Activity implements
 		setContentView(R.layout.activity_main);
 		
 		mStorageDir = ExternalStorage.getStorageDirectory();
-		if (mStorageDir == null)
-			noSecondaryStorage = true;
-			
-		FrameLayout fl = (FrameLayout)findViewById(R.id.menu_layout);
-		if (noSecondaryStorage)
-			fl.setVisibility(View.GONE);
-		
+				
 		mContainer = (LinearLayout)findViewById(R.id.container);
 		mContainer.setOnSystemUiVisibilityChangeListener(this);
 
@@ -78,14 +70,10 @@ public class MainActivity extends Activity implements
       
         FragmentTransaction ft = getFragmentManager().beginTransaction();
         
-        String path = noSecondaryStorage ? null : 
-										mStorageDir + "/" +
-										StoragePath.CYCLE_DIR;
+        String path = mStorageDir + "/" + StoragePath.CYCLE_DIR;
         mRecordFileFragment = GridFileListFragment.newInstance(path);
         
-        path = noSecondaryStorage ? null : 
-									mStorageDir + "/" +
-									StoragePath.SAVE_DIR;
+        path = mStorageDir + "/" + StoragePath.SAVE_DIR;
         mSavedFileFragment = GridFileListFragment.newInstance(path);
         
         ft.add(R.id.fragment_container, mRecordFileFragment, RECORD_FILE_TAB);
@@ -96,7 +84,6 @@ public class MainActivity extends Activity implements
         receiver = new StatusReceiver();  
         IntentFilter filter = new IntentFilter();  
         filter.addAction(RecordService.REFRESH_ACTION);
-        filter.addAction(RecordService.STATUS_ACTION);
         registerReceiver(receiver, filter);  
         
         BitmapCache.initBitmapCache(this);
@@ -116,7 +103,7 @@ public class MainActivity extends Activity implements
 	@Override 
 	public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
 		switch (position) {
-		case 1:
+		case 0:
 			{
 				mActionBar.setTitle(R.string.action_bar_title_1);
 				setActionBarFileCount(mStorageDir + "/" + StoragePath.CYCLE_DIR);
@@ -127,7 +114,7 @@ public class MainActivity extends Activity implements
 			}	
 			break;
 		
-		case 2:
+		case 1:
 			{
 				mActionBar.setTitle(R.string.action_bar_title_2);
 				setActionBarFileCount(mStorageDir + "/" + StoragePath.SAVE_DIR);
@@ -138,10 +125,10 @@ public class MainActivity extends Activity implements
 			}	
 			break;
 		
-		case 4:
+		case 3:
 			break;
 			
-		case 5:
+		case 4:
 			DialogFragment newFragment = 
 			AlertDialogFragment.newInstance(R.string.alert_dialog_title);
 			newFragment.show(getFragmentManager(), "dialog");
@@ -227,77 +214,54 @@ public class MainActivity extends Activity implements
         			mSavedFileFragment.refreshFileList();
         			setActionBarFileCount(mStorageDir + "/" + StoragePath.SAVE_DIR);
         		}	
-        	} else if (action.equals(RecordService.STATUS_ACTION)) {
-        		int s = intent.getExtras().getInt("status");
-        		if (s != 0) {
-           			saveFile = true;
-           			Switch saveSwitch = (Switch)findViewById(R.id.save_switch);
-           			saveSwitch.setChecked(saveFile);
-        		}	
-        	}
+        		
+        		Switch saveSwitch = (Switch)findViewById(R.id.save_switch);
+        		saveFile = intent.getExtras().getBoolean("save_status");
+        		saveSwitch.setChecked(saveFile);
+        	} 
         }  
     }  
     
-    private void deleteSavedFiles() {
-    	new Thread() {
-    		public void run() {
-    			try {
-    				ArrayList<RecordFileList.FileInfo> fileList = 
-    							RecordFileList.getFilelist(mStorageDir + 
-    														"/" +
-    														StoragePath.SAVE_DIR, 
-															".mp4");
-		
-    				for (RecordFileList.FileInfo fileInfo : fileList) {
-    					File file = new File(fileInfo.path);
-    					file.delete();
-    				}
-	   
-    				Message msg = new Message();
-    				msg.what = 0;
-    				msg.obj = pd;
-    				handler.sendMessage(msg);
-    			} catch (Exception e) {
-	   
-    			}
-    		}
-    	}.start();
+    private class DeleteFilesTask extends AsyncTask<String, Void, Boolean> {
+       	@Override
+		protected Boolean doInBackground(String ... path) {
+       		File dir = new File(path[0]);
+       		File[] files = dir.listFiles();
+       		if (files != null) {
+       			for (File f : files) {
+       				if (f.isFile())
+       					f.delete();
+       			}
+       		}
+       		
+       		return true;
+       	}
+    	
+       	@Override
+		protected void onPostExecute(Boolean result) {
+       		pd.dismiss();
+       		
+       		new Handler().postDelayed(new Runnable() {   
+				public void run() {   
+					if (mSavedFileFragment.isVisible()) {
+	        			mSavedFileFragment.refreshFileList();
+	        			setActionBarFileCount(mStorageDir + "/" + StoragePath.SAVE_DIR);
+					}	
+				}   
+			}, 500);   
+       	}
     }
     
-    private static Handler handler = new Handler() {
-		@Override
-		public void handleMessage(Message msg) {
-			super.handleMessage(msg);
-			
-			switch (msg.what) {
-			case 0:
-				ProgressDialog progDialog = (ProgressDialog)msg.obj;
-				progDialog.dismiss();
-				break;
-							
-			default: ;	
-			}
-		}
-	};
-	
-	public void doPositiveClick() {
-        // Do stuff here.
+    public void doPositiveClick() {
 		pd= ProgressDialog.show(this, 
 								getString(R.string.dialog_title_2), 
 								getString(R.string.dialog_msg_2));
 
-		deleteSavedFiles();
-
-		new Handler().postDelayed(new Runnable() {   
-			public void run() {   
-				if (mSavedFileFragment.isVisible()) 
-        			mSavedFileFragment.refreshFileList();
-			}   
-		}, 500);   
+		new DeleteFilesTask().execute(mStorageDir + "/" + StoragePath.SAVE_DIR);
     }
     
     public void doNegativeClick() {
-        // Do stuff here.
+
     }
     
 	public static class AlertDialogFragment extends DialogFragment {
@@ -314,21 +278,33 @@ public class MainActivity extends Activity implements
 			int title = getArguments().getInt("title");
 	            
 			return new AlertDialog.Builder(getActivity())
-							.setIcon(android.R.drawable.ic_dialog_alert)
-							.setTitle(title)
-							.setPositiveButton(R.string.alert_dialog_ok,
-									new DialogInterface.OnClickListener() {
-										public void onClick(DialogInterface dialog, int whichButton) {
-											((MainActivity)getActivity()).doPositiveClick();
-										}
-									})
-							.setNegativeButton(R.string.alert_dialog_cancel,
-									new DialogInterface.OnClickListener() {
-	                            		public void onClick(DialogInterface dialog, int whichButton) {
-	                            			((MainActivity)getActivity()).doNegativeClick();
-	                            		}
-	                        		})
-	                        .create();
+						.setIcon(android.R.drawable.ic_dialog_alert)
+						.setTitle(title)
+						.setPositiveButton(R.string.alert_dialog_ok,
+							new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int whichButton) {
+									((MainActivity)getActivity()).doPositiveClick();
+								}
+							})
+						.setNegativeButton(R.string.alert_dialog_cancel,
+							new DialogInterface.OnClickListener() {
+	                       		public void onClick(DialogInterface dialog, int whichButton) {
+	                       			((MainActivity)getActivity()).doNegativeClick();
+	                       		}
+	                    	})
+	                    .create();
+		}
+	}
+	
+	public static class BootBroadcastReceiver extends BroadcastReceiver {
+		private static final String action_boot="android.intent.action.BOOT_COMPLETED"; 
+		 
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			if (intent.getAction().equals(action_boot)) { 
+				Intent i = new Intent(context, RecordService.class);
+				context.startService(i);
+			}
 		}
 	}
 }
