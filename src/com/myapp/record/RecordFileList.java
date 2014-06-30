@@ -28,14 +28,6 @@ public class RecordFileList {
             fileInfo.lastModified= file.lastModified();  
             fileInfo.title = fileInfo.name;
             
-            //String s[] = fileInfo.name.split("-");
-            //fileInfo.title = s[1].substring(0, 4) + "/"
-            //				+ s[1].substring(4, 6) +"/"
-            //				+ s[1].substring(6, 8) + " "
-            //				+ s[2].substring(0, 2) + ":"
-            //				+ s[2].substring(2, 4) + ":"
-            //				+ s[2].substring(4, 6);
-            
             fileList.add(fileInfo);  
         }  
 		

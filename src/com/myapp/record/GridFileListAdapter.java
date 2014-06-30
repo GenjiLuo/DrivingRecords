@@ -1,6 +1,7 @@
 package com.myapp.record;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 
 import android.app.Activity;
 import android.content.Context;
@@ -13,6 +14,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AbsListView;
 import android.widget.BaseAdapter;
+import android.widget.FrameLayout;
 import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -22,6 +24,7 @@ public class GridFileListAdapter extends BaseAdapter
 								implements AbsListView.OnScrollListener {
 	private ArrayList<RecordFileList.FileInfo> mFileList = 
 						new ArrayList<RecordFileList.FileInfo>();
+	private ArrayList<String> mSelectedFiles = new ArrayList<String>();
 	private LayoutInflater mInflater;
 	private GridView mGridView;
 	private int mFirstItem, mItemCount;
@@ -68,6 +71,39 @@ public class GridFileListAdapter extends BaseAdapter
 		notifyChange();
 	}
 
+	public void setSelectState(int position, boolean select) {
+		RecordFileList.FileInfo fileInfo = mFileList.get(position);
+		boolean exist = false;
+		int index;
+		
+		for (index = 0; index < mSelectedFiles.size(); index++) {
+			String s = mSelectedFiles.get(index);
+			if (s.equals(fileInfo.path)) { 
+				exist = true;
+				break;
+			}	
+		}	
+		
+		if (select) {
+			if (exist) return;
+			mSelectedFiles.add(fileInfo.path);
+		} else {
+			if (exist) 
+				mSelectedFiles.remove(index);
+		}
+		
+		notifyDataSetChanged();
+	}
+	
+	public void resetSelectState() {
+		mSelectedFiles.clear();
+		notifyDataSetChanged();
+	}
+	
+	public String[] getSelectedFiles() {
+		return (String[])mSelectedFiles.toArray(new String[0]);
+	}
+	
 	@Override
 	public int getCount() {
 		return mFileList.size();
@@ -83,8 +119,10 @@ public class GridFileListAdapter extends BaseAdapter
 		return position;
 	}
 
-	private String convertFileNameToDate(String fileName) {
-		String name[] = fileName.split("\\.");
+	private String createFileInfomation(RecordFileList.FileInfo fileInfo) {
+		String prefix;
+		
+		String name[] = fileInfo.name.split("\\.");
 		if (name == null || name.length != 2)
 			return null;
 
@@ -93,13 +131,34 @@ public class GridFileListAdapter extends BaseAdapter
 			return null;
 		if (seg[1].length() != 8 || seg[2].length() != 6)
 			return null;
-
-		return seg[1].substring(0, 4) + "/"
-				+ seg[1].substring(4, 6) +"/"
-				+ seg[1].substring(6, 8) + "  "
-				+ seg[2].substring(0, 2) + ":"
-				+ seg[2].substring(2, 4) + ":"
-				+ seg[2].substring(4, 6);
+		
+		Calendar currentDate = Calendar.getInstance();
+		int currentDay = currentDate.get(Calendar.DAY_OF_YEAR);
+		
+		Calendar fileDate = Calendar.getInstance();
+		fileDate.setTimeInMillis(fileInfo.lastModified);
+		int fileDay = fileDate.get(Calendar.DAY_OF_YEAR);
+		
+		int d = currentDay - fileDay;
+		if (d == 0) 
+			prefix = "今天";
+		else if (d == 1)
+			prefix = "昨天";
+		else if (d <= 6) 
+			prefix = d + "天前";
+		else {
+			if (seg[1].substring(4, 5).equals("0")) 
+				prefix = seg[1].substring(5, 6) + "月";
+			else
+				prefix = seg[1].substring(4, 6) + "月";
+			
+			prefix += seg[1].substring(6, 8) + "日";
+		}	
+				
+		return prefix + "    " + 
+				seg[2].substring(0, 2) + ":" + 
+				seg[2].substring(2, 4) + ":" +
+				seg[2].substring(4, 6);  
 	}
 
 	@Override
@@ -112,9 +171,10 @@ public class GridFileListAdapter extends BaseAdapter
 			convertView.setLayoutParams(new GridView.LayoutParams(viewWidth, viewWidth));
             
 			holder = new ViewHolder();
-			holder.text = (TextView) convertView.findViewById(R.id.text);
-			holder.image = (ImageView) convertView.findViewById(R.id.icon);
+			holder.text = (TextView)convertView.findViewById(R.id.text);
+			holder.image = (ImageView)convertView.findViewById(R.id.icon);
 			holder.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+			holder.selectMark = (FrameLayout)convertView.findViewById(R.id.select_mark);
 
 			convertView.setTag(holder);
 		} else {
@@ -122,8 +182,15 @@ public class GridFileListAdapter extends BaseAdapter
 		}
 
 		RecordFileList.FileInfo info = mFileList.get(position);
-
-		holder.text.setText(convertFileNameToDate(info.name));
+		holder.text.setText(createFileInfomation(info));
+		
+		boolean selected = false;
+		for (String s : mSelectedFiles) {
+			if (s.equals(info.path))
+				selected = true;
+		}
+		
+		holder.selectMark.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
 
 		final Bitmap bitmap = BitmapCache.getBitmapFromMemoryCache(info.name);
 		if (bitmap != null) {
@@ -138,11 +205,12 @@ public class GridFileListAdapter extends BaseAdapter
 		return convertView;
 	}
 
-	private static class ViewHolder {
+	private class ViewHolder {
 		TextView text;
 		ImageView image;
+		FrameLayout selectMark;
 	}
-
+	
 	private class LoadThumbnail extends AsyncTask<RecordFileList.FileInfo, Void, Bitmap> {
 		private int mPosition;
 		private RecordFileList.FileInfo mInfo;

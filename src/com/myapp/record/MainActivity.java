@@ -5,19 +5,17 @@ import java.util.ArrayList;
 
 import android.app.ActionBar;
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.DialogFragment;
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningServiceInfo;
 import android.app.FragmentTransaction;
-import android.app.ProgressDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.os.AsyncTask;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
-import android.os.Handler;
+import android.preference.PreferenceManager;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.AdapterView;
@@ -34,23 +32,29 @@ public class MainActivity extends Activity implements
 							AdapterView.OnItemClickListener {
 	private static final String RECORD_FILE_TAB = "record";
 	private static final String SAVED_FILE_TAB = "saved";
+	private static final String ARCHIVE_FILE_TAB = "archive";
 	
 	private GridFileListFragment mRecordFileFragment = null, 
-								mSavedFileFragment = null;
+								mSavedFileFragment = null,
+								mArchiveFileFragment = null;
 	private StatusReceiver receiver;  
 	private boolean saveFile = false;
-	private ProgressDialog pd;
-	private String mStorageDir;
 	private LinearLayout mContainer;
 	private ListView mMenuItemList;
 	private MenuItemAdapter mMenuItemAdapter;
 	private ActionBar mActionBar;
+	private boolean isRecording;
+	
+	public String mStorageDir;
+	
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-				
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+		
+		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
+					
+	    getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); 
 		
 		setContentView(R.layout.activity_main);
@@ -71,10 +75,17 @@ public class MainActivity extends Activity implements
         FragmentTransaction ft = getFragmentManager().beginTransaction();
         
         String path = mStorageDir + "/" + StoragePath.CYCLE_DIR;
-        mRecordFileFragment = GridFileListFragment.newInstance(path);
+        mRecordFileFragment = GridFileListFragment.newInstance(path, R.menu.cycle_list_menu);
         
         path = mStorageDir + "/" + StoragePath.SAVE_DIR;
-        mSavedFileFragment = GridFileListFragment.newInstance(path);
+        mSavedFileFragment = GridFileListFragment.newInstance(path, R.menu.saved_list_menu);
+        
+        path = mStorageDir + "/" + StoragePath.ARCHIVE_DIR;
+        File dir = new File(path);
+        if (!dir.exists())
+        	dir.mkdirs();
+        
+        mArchiveFileFragment = GridFileListFragment.newInstance(path, R.menu.archive_list_menu);
         
         ft.add(R.id.fragment_container, mRecordFileFragment, RECORD_FILE_TAB);
 		ft.commit();
@@ -89,61 +100,112 @@ public class MainActivity extends Activity implements
         BitmapCache.initBitmapCache(this);
    	}
 
+	private boolean isRecordServiceRunning() {  
+    	ActivityManager manager = (ActivityManager)((Context)this).getSystemService(Context.ACTIVITY_SERVICE);
+    	
+    	for (RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {  
+        	if (RecordService.class.getName().equals(service.service.getClassName()))   
+                return true;  
+        }  
+    	
+        return false;  
+    } 
+	
+	private void setItemState(boolean state) {
+		String title = state ? 
+				getResources().getString(R.string.menu_item_stop_record) : 
+				getResources().getString(R.string.menu_item_start_record);
+		Bitmap icon =  state ? 
+				BitmapFactory.decodeResource(getResources(), R.drawable.ic_stop) :
+				BitmapFactory.decodeResource(getResources(), R.drawable.ic_record);	
+				
+		mMenuItemAdapter.setItemTitle(MenuItemAdapter.MenuItemContent.MENU_ITEM_CTRL_RECORD.ordinal() , title);
+		mMenuItemAdapter.setItemIcon(MenuItemAdapter.MenuItemContent.MENU_ITEM_CTRL_RECORD.ordinal() , icon);
+		
+		mMenuItemAdapter.enableItem(MenuItemAdapter.MenuItemContent.MENU_ITEM_TEMP_SAVE.ordinal(), state);
+		mMenuItemAdapter.enableItem(MenuItemAdapter.MenuItemContent.MENU_ITEM_PREVIEW.ordinal(), state);
+	}
+	
 	@Override
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(Bundle outState) { 
       
     }
 	
 	@Override 
 	public void onSystemUiVisibilityChange(int visibility) {
-		if ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0) 
+		if ((visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0 && isRecording) {
 			closePreview();
+			//checkStatus();
+		}	
 	}
 	
 	@Override 
 	public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-		switch (position) {
-		case 0:
-			{
-				mActionBar.setTitle(R.string.action_bar_title_1);
-				setActionBarFileCount(mStorageDir + "/" + StoragePath.CYCLE_DIR);
+		if (MenuItemAdapter.MenuItemContent.MENU_ITEM_CTRL_RECORD.ordinal() == position) {
+			isRecording = !isRecording;
 			
-				FragmentTransaction ft = getFragmentManager().beginTransaction();
-				ft.replace(R.id.fragment_container, mRecordFileFragment, RECORD_FILE_TAB);
-				ft.commit();
-			}	
-			break;
-		
-		case 1:
-			{
-				mActionBar.setTitle(R.string.action_bar_title_2);
-				setActionBarFileCount(mStorageDir + "/" + StoragePath.SAVE_DIR);
+			Intent intent = new Intent(MainActivity.this, RecordService.class);
+			if (isRecording) 
+				startService(intent);
+			else 
+				stopService(intent);
 			
-				FragmentTransaction ft = getFragmentManager().beginTransaction();
-				ft.replace(R.id.fragment_container, mSavedFileFragment, SAVED_FILE_TAB);
-				ft.commit();
-			}	
-			break;
-		
-		case 3:
-			break;
-			
-		case 4:
-			DialogFragment newFragment = 
-			AlertDialogFragment.newInstance(R.string.alert_dialog_title);
-			newFragment.show(getFragmentManager(), "dialog");
-			break;
-			
-		case 6:
+			setItemState(isRecording);
+		} else if (MenuItemAdapter.MenuItemContent.MENU_ITEM_PREVIEW.ordinal() == position) {
 			mContainer.setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
 			
 			Intent intent = new Intent(MainActivity.this, RecordService.class);
     		String action = RecordService.PREVIEW_ACTION; 
     		intent.setAction(action);
     		startService(intent);
-			break;
+		} else if (MenuItemAdapter.MenuItemContent.MENU_ITEM_TEMP_SAVE.ordinal() == position) {
 			
-		default: break;	
+		} else if (MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_CYCLE_RECORD.ordinal() == position) {
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_CYCLE_RECORD.ordinal(), true);
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_TEMP_SAVE_RECORD.ordinal(), false);
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_ARCHIVE_RECORD.ordinal(), false);
+			
+			mActionBar.setTitle(R.string.action_bar_title_1);
+			setActionBarFileCount(mStorageDir + "/" + StoragePath.CYCLE_DIR);
+		
+			mSavedFileFragment.closeActionMode();
+			mArchiveFileFragment.closeActionMode();
+			
+			FragmentTransaction ft = getFragmentManager().beginTransaction();
+			ft.replace(R.id.fragment_container, mRecordFileFragment, RECORD_FILE_TAB);
+			ft.commit();
+		} else if (MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_TEMP_SAVE_RECORD.ordinal() == position) {
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_CYCLE_RECORD.ordinal(), false);
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_TEMP_SAVE_RECORD.ordinal(), true);
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_ARCHIVE_RECORD.ordinal(), false);
+			
+			mActionBar.setTitle(R.string.action_bar_title_2);
+			setActionBarFileCount(mStorageDir + "/" + StoragePath.SAVE_DIR);
+		
+			mRecordFileFragment.closeActionMode();
+			mArchiveFileFragment.closeActionMode();
+			
+			FragmentTransaction ft = getFragmentManager().beginTransaction();
+			ft.replace(R.id.fragment_container, mSavedFileFragment, SAVED_FILE_TAB);
+			ft.commit();
+		} else if (MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_ARCHIVE_RECORD.ordinal() == position) {
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_CYCLE_RECORD.ordinal(), false);
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_TEMP_SAVE_RECORD.ordinal(), false);
+			mMenuItemAdapter.setItemHightlight(MenuItemAdapter.MenuItemContent.MENU_ITEM_LIST_ARCHIVE_RECORD.ordinal(), true);
+			
+			mActionBar.setTitle(R.string.action_bar_title_3);
+			setActionBarFileCount(mStorageDir + "/" + StoragePath.ARCHIVE_DIR);
+			
+			mRecordFileFragment.closeActionMode();
+			mSavedFileFragment.closeActionMode();
+			
+			FragmentTransaction ft = getFragmentManager().beginTransaction();
+			ft.replace(R.id.fragment_container, mArchiveFileFragment, ARCHIVE_FILE_TAB);
+			ft.commit();
+			
+		} else if (MenuItemAdapter.MenuItemContent.MENU_ITEM_OPTION.ordinal() == position) {
+			Intent intent = new Intent(this, PreferencesActivity.class);
+			startActivity(intent);
 		}
 	}
 	
@@ -163,9 +225,11 @@ public class MainActivity extends Activity implements
     protected void onResume() {                                                                                                                                                                                                                                                      
         super.onResume();
         
-        Intent intent = new Intent(MainActivity.this, RecordService.class);
-        intent.setAction(RecordService.CHECK_STATUS_ACTION);
-        startService(intent);
+        isRecording = isRecordServiceRunning();
+        setItemState(isRecording);
+        
+        if (isRecording) 
+        	checkStatus();
     }
 
     @Override
@@ -178,7 +242,7 @@ public class MainActivity extends Activity implements
     	super.onDestroy();
     	unregisterReceiver(receiver);  
     }
- 
+    
     private int getFileCount(String path) {
     	ArrayList<FileInfo> fileInfo = RecordFileList.getFilelist(path, ".mp4");
     	if (fileInfo != null)
@@ -187,7 +251,7 @@ public class MainActivity extends Activity implements
     	return 0;
     }
     
-    private void setActionBarFileCount(String path) {
+    public void setActionBarFileCount(String path) {
     	int count = getFileCount(path);
 		mActionBar.setSubtitle(String.valueOf(count) + "¸öÎÄ¼þ");
     }
@@ -197,6 +261,12 @@ public class MainActivity extends Activity implements
         String action = RecordService.CLOSE_PREVIEW_ACTION; 
         intent.setAction(action);
         startService(intent);
+    }
+    
+    private void checkStatus() {
+    	Intent intent = new Intent(MainActivity.this, RecordService.class);
+    	intent.setAction(RecordService.CHECK_STATUS_ACTION);
+    	startService(intent);
     }
     
     private class StatusReceiver extends BroadcastReceiver {  
@@ -216,86 +286,16 @@ public class MainActivity extends Activity implements
         		}	
         		
         		Switch saveSwitch = (Switch)findViewById(R.id.save_switch);
-        		saveFile = intent.getExtras().getBoolean("save_status");
-        		saveSwitch.setChecked(saveFile);
+        		if (saveSwitch != null) {
+        			if (saveSwitch.isEnabled()) {
+        				saveFile = intent.getExtras().getBoolean("save_status");
+        				saveSwitch.setChecked(saveFile);
+        			}	
+        		}	
         	} 
         }  
     }  
-    
-    private class DeleteFilesTask extends AsyncTask<String, Void, Boolean> {
-       	@Override
-		protected Boolean doInBackground(String ... path) {
-       		File dir = new File(path[0]);
-       		File[] files = dir.listFiles();
-       		if (files != null) {
-       			for (File f : files) {
-       				if (f.isFile())
-       					f.delete();
-       			}
-       		}
-       		
-       		return true;
-       	}
-    	
-       	@Override
-		protected void onPostExecute(Boolean result) {
-       		pd.dismiss();
-       		
-       		new Handler().postDelayed(new Runnable() {   
-				public void run() {   
-					if (mSavedFileFragment.isVisible()) {
-	        			mSavedFileFragment.refreshFileList();
-	        			setActionBarFileCount(mStorageDir + "/" + StoragePath.SAVE_DIR);
-					}	
-				}   
-			}, 500);   
-       	}
-    }
-    
-    public void doPositiveClick() {
-		pd= ProgressDialog.show(this, 
-								getString(R.string.dialog_title_2), 
-								getString(R.string.dialog_msg_2));
-
-		new DeleteFilesTask().execute(mStorageDir + "/" + StoragePath.SAVE_DIR);
-    }
-    
-    public void doNegativeClick() {
-
-    }
-    
-	public static class AlertDialogFragment extends DialogFragment {
-		public static AlertDialogFragment newInstance(int title) {
-			AlertDialogFragment frag = new AlertDialogFragment();
-			Bundle args = new Bundle();
-			args.putInt("title", title);
-			frag.setArguments(args);
-			return frag;
-		}
-	        
-		@Override
-		public Dialog onCreateDialog(Bundle savedInstanceState) {
-			int title = getArguments().getInt("title");
-	            
-			return new AlertDialog.Builder(getActivity())
-						.setIcon(android.R.drawable.ic_dialog_alert)
-						.setTitle(title)
-						.setPositiveButton(R.string.alert_dialog_ok,
-							new DialogInterface.OnClickListener() {
-								public void onClick(DialogInterface dialog, int whichButton) {
-									((MainActivity)getActivity()).doPositiveClick();
-								}
-							})
-						.setNegativeButton(R.string.alert_dialog_cancel,
-							new DialogInterface.OnClickListener() {
-	                       		public void onClick(DialogInterface dialog, int whichButton) {
-	                       			((MainActivity)getActivity()).doNegativeClick();
-	                       		}
-	                    	})
-	                    .create();
-		}
-	}
-	
+           
 	public static class BootBroadcastReceiver extends BroadcastReceiver {
 		private static final String action_boot="android.intent.action.BOOT_COMPLETED"; 
 		 

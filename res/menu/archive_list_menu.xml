@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android" >
+    <item android:id="@+id/select_all" android:showAsAction="always|withText" android:icon="@drawable/ic_select_all" android:title="@string/menu_item_select_all"></item>
+    <item android:id="@+id/discard" android:showAsAction="always|withText" android:icon="@drawable/ic_discard" android:title="@string/menu_item_discard"></item>
+    
+
+</menu>

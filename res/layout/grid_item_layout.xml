@@ -30,18 +30,26 @@
 
         <TextView
             android:id="@+id/text"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
             android:layout_centerHorizontal="true"
-            android:shadowColor="#ff000000"
-            android:shadowDx="1"
-            android:shadowDy="1"
-            android:shadowRadius="2"
+            android:background="#70000000"
+            android:gravity="center"
+            android:height="50dp"
             android:text="TextView"
             android:textColor="@android:color/white"
             android:textSize="17sp" />
 
     </RelativeLayout>
+
+    <FrameLayout
+        android:id="@+id/select_mark"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/grid_view_shape"
+        android:visibility="invisible" >
+
+    </FrameLayout>
 
 </FrameLayout>

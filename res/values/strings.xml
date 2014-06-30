@@ -9,20 +9,30 @@
     <string name="dialog_msg_2">正在删除...</string>
     <string name="alert_dialog_ok">确定</string>
     <string name="alert_dialog_cancel">取消</string>
-    <string name="alert_dialog_title">删除已保留的录像？</string>
+    <string name="alert_dialog_title">要删除所选内容吗？</string>
     <string name="btn_name_preview">摄像预览</string>
     <string name="btn_name_delete">删除保留录像</string>
     <string name="action_bar_title_1">循环录像文件</string>
     <string name="action_bar_title_2">已保留的录像文件</string>
-    <string-array name="menu_item_string">
-        <item >循环录像文件</item>
-        <item >已保留的录像文件</item>
-        <item >--</item>
-        <item >保留录像</item>
-        <item >删除保留录像</item>
-        <item >--</item>
-        <item >视频预览</item>
-        <item >**</item>
-    </string-array>
+    <string name="menu_item_list_cycle">循环录像文件</string>
+    <string name="menu_item_list_save">已保留的录像文件</string>
+    <string name="menu_item_list_archive">归档录像文件</string>
+    <string name="menu_item_save_record">保留录像</string>
+    <string name="menu_item_delete">删除保留录像</string>
+    <string name="menu_item_start_record">开始录像</string>
+    <string name="menu_item_stop_record">停止录像</string>
+    <string name="menu_item_preview">视频预览</string>
+    <string name="menu_item_settings">设置</string>
+    <string name="switch_pref_title">录像时录音</string>
+    <string name="about_pref_title">关于</string>
+    <string name="pref_title">设置</string>
+    <string name="action_bar_title_3">归档录像文件</string>
+    <string name="menu_item_archive">归档</string>
+    <string name="menu_item_select_all">全选</string>
+    <string name="menu_item_discard">删除</string>
+    <string name="progress_dialog_title_1">归档</string>
+    <string name="progress_dialog_msg_1">正在归档</string>
+    <string name="progress_dialog_title_2">删除</string>
+    <string name="progress_dialog_msg_2">正在删除所选内容</string>
     
 </resources>

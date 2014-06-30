@@ -12,6 +12,7 @@ import android.app.Notification;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
 import android.hardware.Camera.Parameters;
@@ -22,6 +23,7 @@ import android.media.MediaRecorder.OutputFormat;
 import android.media.MediaRecorder.VideoEncoder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -72,8 +74,7 @@ public class RecordService extends Service implements
     private Handler mRestartTimer = new Handler(); 
     private RestartRecord mRestart = new RestartRecord();
     private boolean mNeedRestart = false;
-    
-    
+      
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		String action = intent.getAction();
@@ -280,21 +281,34 @@ public class RecordService extends Service implements
 	}
 	
 	private boolean prepareVideoRecorder() {
+		SharedPreferences pref = PreferenceManager.getDefaultSharedPreferences(getApplication());
+		boolean recordAudio = pref.getBoolean("switch_pref", true);
+		Log.i(TAG,"record aduio: " + recordAudio);
+		
         mCam.unlock();
         mMr.setCamera(mCam);
         
         mMr.setPreviewDisplay(mHolder.getSurface());
         
-        mMr.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
+        if (recordAudio)
+        	mMr.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
         mMr.setVideoSource(MediaRecorder.VideoSource.CAMERA);
         
         CamcorderProfile profile = CamcorderProfile.get(0, CamcorderProfile.QUALITY_HIGH);
-        profile.videoCodec = VideoEncoder.H264;
-        profile.videoFrameHeight = mPreviewSize.height;
-        profile.videoFrameWidth = mPreviewSize.width;
-        profile.fileFormat = OutputFormat.MPEG_4;
-        //profile.videoBitRate = 3000000;
-        mMr.setProfile(profile);
+        
+        mMr.setOutputFormat(OutputFormat.MPEG_4);
+        
+        if (recordAudio) {
+        	mMr.setAudioChannels(profile.audioChannels);
+        	mMr.setAudioEncoder(profile.audioCodec);
+        	mMr.setAudioEncodingBitRate(profile.audioBitRate);
+        	mMr.setAudioSamplingRate(16000);
+        }
+        
+        mMr.setVideoEncoder(VideoEncoder.H264);
+        mMr.setVideoEncodingBitRate(profile.videoBitRate);
+        mMr.setVideoFrameRate(profile.videoFrameRate);
+        mMr.setVideoSize(mPreviewSize.width, mPreviewSize.height);
         
         mTempFileName = getOutputMediaFileName();
         mMr.setOutputFile(mTempFileName);
